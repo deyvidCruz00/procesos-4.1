@@ -64,8 +64,23 @@
         <div class="simulation-section" id="simulation-results" style="display: none;">
             <h2>Resultados de la Simulación</h2>
             
+            <div class="timeline-animation">
+                <h3>Animación de Ejecución de Procesos</h3>
+                <div id="timeline-container">
+                    <div id="timeline-header">
+                        <div class="timeline-controls">
+                            <button id="play-btn" onclick="startAnimation()">▶ Reproducir</button>
+                            <button id="pause-btn" onclick="pauseAnimation()" disabled>⏸ Pausar</button>
+                            <button id="reset-btn" onclick="resetAnimation()">⏹ Reiniciar</button>
+                            <span id="current-time-display">Tiempo: 0</span>
+                        </div>
+                    </div>
+                    <div id="timeline-canvas"></div>
+                </div>
+            </div>
+            
             <div class="queue-visualization">
-                <h3>Visualización de Colas y Estados</h3>
+                <h3>Estados de Procesos</h3>
                 <div id="queue-display"></div>
             </div>
             
@@ -97,7 +112,10 @@
     
     <script>
         let processes = [];
-        
+        let simulationData = null;
+        let animationInterval = null;
+        let currentAnimationTime = 0;
+        let isAnimationRunning = false;
         // Inicializar visibilidad al cargar la página
         document.addEventListener('DOMContentLoaded', function() {
             // Por defecto FCFS está seleccionado, así que ocultar prioridad
@@ -238,6 +256,7 @@
         }
         
         function displayResults(result) {
+            simulationData = result;
             document.getElementById('simulation-results').style.display = 'block';
             
             // Mostrar log de ejecución
@@ -245,6 +264,9 @@
             
             // Mostrar estadísticas
             displayStatistics(result.process_stats);
+            
+            // Crear timeline para animación
+            createTimeline(result.execution_log, result.process_stats);
             
             // Mostrar visualización de colas
             displayQueueVisualization(result.execution_log);
@@ -314,6 +336,193 @@
             });
             
             queueDisplay.appendChild(visualization);
+        }
+        
+        // Funciones de animación de timeline
+        function createTimeline(executionLog, processStats) {
+            const canvas = document.getElementById('timeline-canvas');
+            canvas.innerHTML = '';
+            
+            // Calcular el tiempo máximo
+            const maxTime = Math.max(...processStats.map(p => p.completion_time));
+            
+            // Crear estructura del timeline
+            const timelineStructure = document.createElement('div');
+            timelineStructure.className = 'timeline-structure';
+            
+            // Crear fila de llegadas (parte superior)
+            const arrivalRow = document.createElement('div');
+            arrivalRow.className = 'arrival-row';
+            arrivalRow.innerHTML = '<div class="row-label">Llegadas</div>';
+            
+            // Crear fila de ejecución (parte inferior)
+            const executionRow = document.createElement('div');
+            executionRow.className = 'execution-row';
+            executionRow.innerHTML = '<div class="row-label">Ejecución</div>';
+            
+            // Crear escala de tiempo
+            const timeScale = document.createElement('div');
+            timeScale.className = 'time-scale';
+            
+            // Crear celdas para cada unidad de tiempo
+            for (let t = 0; t <= maxTime; t++) {
+                // Celda de llegada
+                const arrivalCell = document.createElement('div');
+                arrivalCell.className = 'timeline-cell arrival-cell';
+                arrivalCell.setAttribute('data-time', t);
+                arrivalRow.appendChild(arrivalCell);
+                
+                // Celda de ejecución
+                const executionCell = document.createElement('div');
+                executionCell.className = 'timeline-cell execution-cell';
+                executionCell.setAttribute('data-time', t);
+                executionRow.appendChild(executionCell);
+                
+                // Número de tiempo
+                const timeNumber = document.createElement('div');
+                timeNumber.className = 'time-number';
+                timeNumber.textContent = t;
+                timeScale.appendChild(timeNumber);
+            }
+            
+            timelineStructure.appendChild(arrivalRow);
+            timelineStructure.appendChild(executionRow);
+            timelineStructure.appendChild(timeScale);
+            canvas.appendChild(timelineStructure);
+            
+            // Colocar procesos en sus tiempos de llegada
+            processStats.forEach(process => {
+                const arrivalCell = document.querySelector(`[data-time="${process.arrival_time}"].arrival-cell`);
+                if (arrivalCell) {
+                    // Crear flecha de llegada
+                    const arrow = document.createElement('div');
+                    arrow.className = 'arrival-arrow';
+                    arrow.innerHTML = '↓';
+                    
+                    // Crear etiqueta del proceso
+                    const processBox = document.createElement('div');
+                    processBox.className = 'process-arrival';
+                    processBox.textContent = `P${process.pid}`;
+                    processBox.style.display = 'none'; // Inicialmente oculto
+                    
+                    arrivalCell.appendChild(arrow);
+                    arrivalCell.appendChild(processBox);
+                }
+            });
+            
+            // Preparar la animación
+            resetAnimation();
+        }
+        
+        function startAnimation() {
+            if (!simulationData) return;
+            
+            isAnimationRunning = true;
+            document.getElementById('play-btn').disabled = true;
+            document.getElementById('pause-btn').disabled = false;
+            
+            animationInterval = setInterval(() => {
+                updateAnimationFrame();
+                currentAnimationTime++;
+                
+                const maxTime = Math.max(...simulationData.process_stats.map(p => p.completion_time));
+                if (currentAnimationTime > maxTime) {
+                    pauseAnimation();
+                }
+            }, 1000); // 1 segundo por unidad de tiempo
+        }
+        
+        function pauseAnimation() {
+            isAnimationRunning = false;
+            clearInterval(animationInterval);
+            document.getElementById('play-btn').disabled = false;
+            document.getElementById('pause-btn').disabled = true;
+        }
+        
+        function resetAnimation() {
+            pauseAnimation();
+            currentAnimationTime = 0;
+            document.getElementById('current-time-display').textContent = 'Tiempo: 0';
+            
+            // Limpiar animación anterior
+            document.querySelectorAll('.process-arrival').forEach(el => {
+                el.style.display = 'none';
+                el.classList.remove('arrived');
+            });
+            
+            document.querySelectorAll('.arrival-arrow').forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            document.querySelectorAll('.execution-cell').forEach(el => {
+                el.innerHTML = '';
+                el.classList.remove('executing');
+            });
+            
+            document.querySelectorAll('.timeline-cell').forEach(el => {
+                el.classList.remove('current-time');
+            });
+        }
+        
+        function updateAnimationFrame() {
+            document.getElementById('current-time-display').textContent = `Tiempo: ${currentAnimationTime}`;
+            
+            // Marcar tiempo actual
+            document.querySelectorAll('.timeline-cell').forEach(el => {
+                el.classList.remove('current-time');
+            });
+            document.querySelectorAll(`[data-time="${currentAnimationTime}"]`).forEach(el => {
+                el.classList.add('current-time');
+            });
+            
+            // Mostrar llegadas de procesos
+            simulationData.process_stats.forEach(process => {
+                if (process.arrival_time === currentAnimationTime) {
+                    const arrivalCell = document.querySelector(`[data-time="${process.arrival_time}"].arrival-cell`);
+                    if (arrivalCell) {
+                        const arrow = arrivalCell.querySelector('.arrival-arrow');
+                        const arrivalBox = arrivalCell.querySelector('.process-arrival');
+                        
+                        if (arrow) {
+                            arrow.style.display = 'block';
+                        }
+                        
+                        if (arrivalBox) {
+                            // Mostrar la etiqueta del proceso después de un pequeño retraso
+                            setTimeout(() => {
+                                arrivalBox.style.display = 'block';
+                                arrivalBox.classList.add('arrived');
+                            }, 300);
+                        }
+                    }
+                }
+            });
+            
+            // Limpiar ejecución anterior
+            document.querySelectorAll('.execution-cell').forEach(cell => {
+                if (parseInt(cell.getAttribute('data-time')) === currentAnimationTime) {
+                    cell.innerHTML = '';
+                    cell.classList.remove('executing');
+                }
+            });
+            
+            // Mostrar ejecución usando timeline_data
+            if (simulationData.timeline_data) {
+                const currentExecution = simulationData.timeline_data.filter(item => 
+                    item.time === currentAnimationTime && item.state === 'RUNNING'
+                );
+                
+                currentExecution.forEach(item => {
+                    const executionCell = document.querySelector(`[data-time="${currentAnimationTime}"].execution-cell`);
+                    if (executionCell) {
+                        const processBox = document.createElement('div');
+                        processBox.className = 'process-execution';
+                        processBox.textContent = `P${item.process}`;
+                        executionCell.appendChild(processBox);
+                        executionCell.classList.add('executing');
+                    }
+                });
+            }
         }
     </script>
 </body>

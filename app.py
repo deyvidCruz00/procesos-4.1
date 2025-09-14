@@ -202,6 +202,8 @@ def simulate():
     
     # Calcular estadísticas
     process_stats = []
+    timeline_data = []
+    
     for process in scheduler.processes:
         process_stats.append({
             'pid': process.pid,
@@ -210,12 +212,32 @@ def simulate():
             'completion_time': getattr(process, 'completion_time', 0),
             'turnaround_time': getattr(process, 'turnaround_time', 0),
             'waiting_time': getattr(process, 'waiting_time', 0),
-            'state': process.state
+            'state': process.state,
+            'start_time': getattr(process, 'start_time', 0)
         })
+    
+    # Crear timeline detallado para animación
+    if algorithm == 'fcfs':
+        current_time = 0
+        sorted_processes = sorted(scheduler.processes, key=lambda p: p.arrival_time)
+        
+        for process in sorted_processes:
+            start_time = max(current_time, process.arrival_time)
+            end_time = start_time + process.burst_time
+            
+            for t in range(start_time, end_time):
+                timeline_data.append({
+                    'time': t,
+                    'process': process.pid,
+                    'state': 'RUNNING'
+                })
+            
+            current_time = end_time
     
     return jsonify({
         'execution_log': execution_log,
-        'process_stats': process_stats
+        'process_stats': process_stats,
+        'timeline_data': timeline_data
     })
 
 if __name__ == '__main__':
