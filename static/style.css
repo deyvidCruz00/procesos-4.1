@@ -538,7 +538,7 @@ tr:hover {
 }
 
 /* Estados de procesos */
-.state-badge, .state-executing, .state-terminated, .state-ready, .state-created, .state-waiting {
+.state-badge, .state-executing, .state-terminated, .state-ready, .state-created, .state-waiting, .state-info, .state-selected {
     padding: 4px 8px;
     border-radius: 3px;
     font-size: 11px;
@@ -570,6 +570,25 @@ tr:hover {
 .state-terminated, .state-badge.state-terminated {
     background: #636e72;
     color: white;
+}
+
+.state-info, .state-badge.state-info {
+    background: #0984e3;
+    color: white;
+    font-weight: bold;
+}
+
+.state-selected, .state-badge.state-selected {
+    background: #e17055;
+    color: white;
+    font-weight: bold;
+    animation: pulse 1s ease-in-out;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
 }
 
 /* Mantener compatibilidad con estados anteriores */

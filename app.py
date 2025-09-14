@@ -122,65 +122,135 @@ class ProcessScheduler:
         return self.execution_log
     
     def sjf_scheduling(self):
-        """Shortest Job First"""
+        """Shortest Job First - Carga todos los procesos por lote y ordena por ráfaga"""
         self.current_time = 0
         self.execution_log = []
-        completed_processes = []
-        remaining_processes = self.processes.copy()
         
-        while remaining_processes:
-            # Procesos que han llegado
-            available_processes = [p for p in remaining_processes if p.arrival_time <= self.current_time]
-            
-            if not available_processes:
-                self.current_time += 1
-                continue
-                
-            # Seleccionar el de menor duración
-            next_process = min(available_processes, key=lambda p: p.burst_time)
-            remaining_processes.remove(next_process)
-            
-            if self.current_time < next_process.arrival_time:
-                self.current_time = next_process.arrival_time
-            
-            # Cambiar a READY
-            next_process.state = "READY"
+        # PASO 1: Cargar todos los procesos por lote para conocer sus ráfagas
+        self.execution_log.append({
+            'time': self.current_time,
+            'action': '=== SJF: CARGA POR LOTES ===',
+            'process': 'SYSTEM',
+            'state': 'INFO'
+        })
+        
+        # Mostrar información de todos los procesos cargados
+        process_info = []
+        for process in self.processes:
+            process_info.append(f"P{process.pid} (Llegada: {process.arrival_time}, Ráfaga: {process.burst_time})")
+        
+        self.execution_log.append({
+            'time': self.current_time,
+            'action': f'Procesos cargados: {", ".join(process_info)}',
+            'process': 'SYSTEM',
+            'state': 'INFO'
+        })
+        
+        # PASO 2: ORDENAR TODOS LOS PROCESOS ÚNICAMENTE POR BURST_TIME (RÁFAGA)
+        # Solo ordenamos por burst_time, sin considerar arrival_time
+        processes_sorted_by_burst = sorted(self.processes, key=lambda p: p.burst_time)
+        
+        self.execution_log.append({
+            'time': self.current_time,
+            'action': '=== ORDENAMIENTO POR RÁFAGA (BURST TIME) ===',
+            'process': 'SYSTEM',
+            'state': 'INFO'
+        })
+        
+        burst_order = []
+        for p in processes_sorted_by_burst:
+            burst_order.append(f"P{p.pid} (ráfaga: {p.burst_time})")
+        
+        self.execution_log.append({
+            'time': self.current_time,
+            'action': f'Orden final por ráfaga: {" → ".join(burst_order)}',
+            'process': 'SYSTEM',
+            'state': 'INFO'
+        })
+        
+        # PASO 3: Ejecutar procesos EN EXACTAMENTE EL ORDEN DE RÁFAGA
+        self.execution_log.append({
+            'time': self.current_time,
+            'action': '=== INICIO DE EJECUCIÓN SJF ===',
+            'process': 'SYSTEM',
+            'state': 'INFO'
+        })
+        
+        # Ejecutar cada proceso en el orden establecido
+        for i, process in enumerate(processes_sorted_by_burst):
             self.execution_log.append({
                 'time': self.current_time,
-                'action': f'Proceso {next_process.pid} está listo (READY)',
-                'process': next_process.pid,
+                'action': f'SELECCIONADO: P{process.pid} (ráfaga: {process.burst_time}) - Posición {i+1} en orden de ráfaga',
+                'process': process.pid,
+                'state': 'SELECTED'
+            })
+            
+            # Esperar hasta que el proceso llegue si es necesario
+            if self.current_time < process.arrival_time:
+                self.execution_log.append({
+                    'time': self.current_time,
+                    'action': f'Esperando llegada de P{process.pid} (llegará en t={process.arrival_time})',
+                    'process': process.pid,
+                    'state': 'WAITING'
+                })
+                self.current_time = process.arrival_time
+            
+            # Cambiar a READY
+            process.state = "READY"
+            self.execution_log.append({
+                'time': self.current_time,
+                'action': f'Proceso {process.pid} está listo (READY)',
+                'process': process.pid,
                 'state': 'READY'
             })
                 
-            next_process.start_time = self.current_time
-            next_process.state = "EXECUTING"
+            # Iniciar ejecución
+            process.start_time = self.current_time
+            process.state = "EXECUTING"
             
             # Actualizar contexto de CPU
-            next_process.cpu["program_counter"] = 0
-            next_process.cpu["instruction_pointer"] = next_process.start_time
+            process.cpu["program_counter"] = 0
+            process.cpu["instruction_pointer"] = process.start_time
             
             self.execution_log.append({
                 'time': self.current_time,
-                'action': f'Proceso {next_process.pid} inicia ejecución (EXECUTING)',
-                'process': next_process.pid,
+                'action': f'Proceso {process.pid} inicia ejecución (EXECUTING) - Ráfaga: {process.burst_time}',
+                'process': process.pid,
                 'state': 'EXECUTING'
             })
             
-            self.current_time += next_process.burst_time
-            next_process.completion_time = self.current_time
-            next_process.turnaround_time = next_process.completion_time - next_process.arrival_time
-            next_process.waiting_time = next_process.turnaround_time - next_process.burst_time
-            next_process.state = "TERMINATED"
+            # Ejecutar por completo (no preemptivo)
+            self.current_time += process.burst_time
+            process.completion_time = self.current_time
+            process.turnaround_time = process.completion_time - process.arrival_time
+            process.waiting_time = process.turnaround_time - process.burst_time
+            process.state = "TERMINATED"
             
             # Actualizar contexto final
-            next_process.cpu["program_counter"] = next_process.burst_time
+            process.cpu["program_counter"] = process.burst_time
             
             self.execution_log.append({
                 'time': self.current_time,
-                'action': f'Proceso {next_process.pid} termina (TERMINATED)',
-                'process': next_process.pid,
+                'action': f'Proceso {process.pid} termina (TERMINATED) - Tiempo total: {process.burst_time}',
+                'process': process.pid,
                 'state': 'TERMINATED'
             })
+            
+        # Mostrar resumen final
+        self.execution_log.append({
+            'time': self.current_time,
+            'action': '=== RESUMEN DE EJECUCIÓN SJF ===',
+            'process': 'SYSTEM',
+            'state': 'INFO'
+        })
+        
+        execution_order = [f"P{p.pid} (ráfaga: {p.burst_time})" for p in processes_sorted_by_burst]
+        self.execution_log.append({
+            'time': self.current_time,
+            'action': f'Orden de ejecución final: {" → ".join(execution_order)}',
+            'process': 'SYSTEM',
+            'state': 'INFO'
+        })
             
         return self.execution_log
     
@@ -379,25 +449,19 @@ def generate_execution_timeline(processes, algorithm, quantum=None):
             
     elif algorithm == 'sjf':
         current_time = 0
-        remaining_processes = [(p.pid, p.arrival_time, p.burst_time) for p in processes]
-        completed = []
+        # Ordenar todos los procesos ÚNICAMENTE por burst_time (sin considerar arrival_time)
+        processes_sorted_by_burst = sorted(
+            [(p.pid, p.arrival_time, p.burst_time) for p in processes], 
+            key=lambda p: p[2]  # Solo burst_time
+        )
         
-        while remaining_processes:
-            # Procesos disponibles en el tiempo actual
-            available = [p for p in remaining_processes if p[1] <= current_time]
-            
-            if not available:
-                current_time += 1
-                continue
-            
-            # Seleccionar proceso con menor burst time
-            next_process = min(available, key=lambda p: p[2])
-            remaining_processes.remove(next_process)
-            
-            pid, arrival_time, burst_time = next_process
-            start_time = current_time
+        # Ejecutar en el orden de ráfaga establecido
+        for pid, arrival_time, burst_time in processes_sorted_by_burst:
+            # Esperar hasta que el proceso llegue si es necesario
+            start_time = max(current_time, arrival_time)
             end_time = start_time + burst_time
             
+            # Generar timeline para este proceso
             for t in range(start_time, end_time):
                 timeline_data.append({
                     'time': t,
