@@ -509,7 +509,7 @@
             // Mostrar ejecución usando timeline_data
             if (simulationData.timeline_data) {
                 const currentExecution = simulationData.timeline_data.filter(item => 
-                    item.time === currentAnimationTime && item.state === 'RUNNING'
+                    item.time === currentAnimationTime && item.state === 'EXECUTING'
                 );
                 
                 currentExecution.forEach(item => {
