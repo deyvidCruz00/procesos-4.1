@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Gestión de Procesos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Simulador de Gestión de Procesos del Sistema Operativo</h1>
+        
+        <div class="input-section">
+            <h2>Configuración de Procesos</h2>
+            
+            <div class="algorithm-selector">
+                <label for="algorithm">Algoritmo de Planificación:</label>
+                <select id="algorithm">
+                    <option value="fcfs">FCFS (First Come First Served)</option>
+                    <option value="sjf">SJF (Shortest Job First)</option>
+                    <option value="rr">Round Robin</option>
+                </select>
+                
+                <div id="quantum-input" style="display: none;">
+                    <label for="quantum">Quantum de tiempo:</label>
+                    <input type="number" id="quantum" value="2" min="1">
+                </div>
+            </div>
+            
+            <div class="process-input">
+                <h3>Agregar Proceso</h3>
+                <div class="input-row">
+                    <input type="text" id="pid" placeholder="ID del Proceso" required>
+                    <input type="number" id="arrival-time" placeholder="Tiempo de Llegada (AT)" min="0" required>
+                    <input type="number" id="burst-time" placeholder="Duración (BT)" min="1" required>
+                    <input type="number" id="priority" placeholder="Prioridad" min="0" value="0" style="display: none;">
+                    <button onclick="addProcess()">Agregar</button>
+                </div>
+            </div>
+            
+            <div class="process-list">
+                <h3>Procesos Configurados</h3>
+                <table id="process-table">
+                    <thead>
+                        <tr>
+                            <th>Proceso</th>
+                            <th>AT (Tiempo de Llegada)</th>
+                            <th>BT (Duración)</th>
+                            <th id="priority-header" style="display: none;">Prioridad</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="process-tbody">
+                    </tbody>
+                </table>
+                
+                <div class="control-buttons">
+                    <button onclick="simulate()" id="simulate-btn" disabled>Iniciar Simulación</button>
+                    <button onclick="clearProcesses()">Limpiar Todo</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="simulation-section" id="simulation-results" style="display: none;">
+            <h2>Resultados de la Simulación</h2>
+            
+            <div class="queue-visualization">
+                <h3>Visualización de Colas y Estados</h3>
+                <div id="queue-display"></div>
+            </div>
+            
+            <div class="execution-log">
+                <h3>Log de Ejecución (Paso del Tiempo)</h3>
+                <div id="execution-timeline"></div>
+            </div>
+            
+            <div class="statistics">
+                <h3>Estadísticas de Procesos</h3>
+                <table id="stats-table">
+                    <thead>
+                        <tr>
+                            <th>Proceso</th>
+                            <th>AT (Arrival Time)</th>
+                            <th>BT (Burst Time)</th>
+                            <th>CT (Completion Time)</th>
+                            <th>TT (TurnAround Time)</th>
+                            <th>WT (Waiting Time)</th>
+                            <th>Estado Final</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stats-tbody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let processes = [];
+        
+        // Inicializar visibilidad al cargar la página
+        document.addEventListener('DOMContentLoaded', function() {
+            // Por defecto FCFS está seleccionado, así que ocultar prioridad
+            document.getElementById('priority').style.display = 'none';
+            document.getElementById('priority-header').style.display = 'none';
+        });
+        
+        // Mostrar/ocultar quantum input según algoritmo
+        document.getElementById('algorithm').addEventListener('change', function() {
+            const quantumInput = document.getElementById('quantum-input');
+            const priorityInput = document.getElementById('priority');
+            const priorityHeader = document.getElementById('priority-header');
+            
+            if (this.value === 'rr') {
+                quantumInput.style.display = 'block';
+            } else {
+                quantumInput.style.display = 'none';
+            }
+            
+            // Mostrar prioridad solo para algoritmos que la usen
+            if (this.value === 'priority' || this.value === 'sjf') {
+                priorityInput.style.display = 'block';
+                priorityHeader.style.display = 'table-cell';
+            } else {
+                priorityInput.style.display = 'none';
+                priorityHeader.style.display = 'none';
+            }
+        });
+        
+        function addProcess() {
+            const pid = document.getElementById('pid').value;
+            const arrivalTime = parseInt(document.getElementById('arrival-time').value);
+            const burstTime = parseInt(document.getElementById('burst-time').value);
+            const priority = parseInt(document.getElementById('priority').value) || 0;
+            
+            if (!pid || isNaN(arrivalTime) || isNaN(burstTime)) {
+                alert('Por favor complete todos los campos requeridos');
+                return;
+            }
+            
+            // Verificar que el PID no esté duplicado
+            if (processes.find(p => p.pid === pid)) {
+                alert('El PID ya existe');
+                return;
+            }
+            
+            const process = {
+                pid: pid,
+                arrival_time: arrivalTime,
+                burst_time: burstTime,
+                priority: priority
+            };
+            
+            processes.push(process);
+            updateProcessTable();
+            clearInputs();
+            
+            // Habilitar botón de simulación
+            document.getElementById('simulate-btn').disabled = false;
+        }
+        
+        function removeProcess(pid) {
+            processes = processes.filter(p => p.pid !== pid);
+            updateProcessTable();
+            
+            if (processes.length === 0) {
+                document.getElementById('simulate-btn').disabled = true;
+            }
+        }
+        
+        function updateProcessTable() {
+            const tbody = document.getElementById('process-tbody');
+            const algorithm = document.getElementById('algorithm').value;
+            tbody.innerHTML = '';
+            
+            processes.forEach(process => {
+                const row = tbody.insertRow();
+                let priorityCell = '';
+                if (algorithm === 'priority' || algorithm === 'sjf') {
+                    priorityCell = `<td>${process.priority}</td>`;
+                }
+                
+                row.innerHTML = `
+                    <td>P${process.pid}</td>
+                    <td>${process.arrival_time}</td>
+                    <td>${process.burst_time}</td>
+                    ${priorityCell}
+                    <td><button onclick="removeProcess('${process.pid}')" class="remove-btn">Eliminar</button></td>
+                `;
+            });
+        }
+        
+        function clearInputs() {
+            document.getElementById('pid').value = '';
+            document.getElementById('arrival-time').value = '';
+            document.getElementById('burst-time').value = '';
+            document.getElementById('priority').value = '0';
+        }
+        
+        function clearProcesses() {
+            processes = [];
+            updateProcessTable();
+            document.getElementById('simulate-btn').disabled = true;
+            document.getElementById('simulation-results').style.display = 'none';
+        }
+        
+        async function simulate() {
+            if (processes.length === 0) {
+                alert('Agregue al menos un proceso para simular');
+                return;
+            }
+            
+            const algorithm = document.getElementById('algorithm').value;
+            const quantum = parseInt(document.getElementById('quantum').value) || 2;
+            
+            const requestData = {
+                processes: processes,
+                algorithm: algorithm,
+                quantum: quantum
+            };
+            
+            try {
+                const response = await fetch('/simulate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const result = await response.json();
+                displayResults(result);
+                
+            } catch (error) {
+                console.error('Error en la simulación:', error);
+                alert('Error al ejecutar la simulación');
+            }
+        }
+        
+        function displayResults(result) {
+            document.getElementById('simulation-results').style.display = 'block';
+            
+            // Mostrar log de ejecución
+            displayExecutionLog(result.execution_log);
+            
+            // Mostrar estadísticas
+            displayStatistics(result.process_stats);
+            
+            // Mostrar visualización de colas
+            displayQueueVisualization(result.execution_log);
+        }
+        
+        function displayExecutionLog(executionLog) {
+            const timeline = document.getElementById('execution-timeline');
+            timeline.innerHTML = '';
+            
+            executionLog.forEach((entry, index) => {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'log-entry';
+                logEntry.innerHTML = `
+                    <span class="time">T=${entry.time}</span>
+                    <span class="action">${entry.action}</span>
+                    <span class="process-state state-${entry.state.toLowerCase()}">${entry.state}</span>
+                `;
+                timeline.appendChild(logEntry);
+            });
+        }
+        
+        function displayStatistics(processStats) {
+            const tbody = document.getElementById('stats-tbody');
+            tbody.innerHTML = '';
+            
+            processStats.forEach(stat => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>P${stat.pid}</td>
+                    <td>${stat.arrival_time}</td>
+                    <td>${stat.burst_time}</td>
+                    <td>${stat.completion_time}</td>
+                    <td>${stat.turnaround_time}</td>
+                    <td>${stat.waiting_time}</td>
+                    <td><span class="state-badge state-${stat.state.toLowerCase()}">${stat.state}</span></td>
+                `;
+            });
+        }
+        
+        function displayQueueVisualization(executionLog) {
+            const queueDisplay = document.getElementById('queue-display');
+            queueDisplay.innerHTML = '';
+            
+            // Crear visualización simple de estados de procesos
+            const processStates = {};
+            processes.forEach(p => {
+                processStates[p.pid] = 'NEW';
+            });
+            
+            const visualization = document.createElement('div');
+            visualization.className = 'process-states';
+            visualization.innerHTML = '<h4>Estados de Procesos a lo largo del tiempo:</h4>';
+            
+            executionLog.forEach(entry => {
+                if (processStates[entry.process] !== entry.state) {
+                    processStates[entry.process] = entry.state;
+                    
+                    const stateChange = document.createElement('div');
+                    stateChange.className = 'state-change';
+                    stateChange.innerHTML = `
+                        <span class="time">T=${entry.time}:</span>
+                        <span class="process">P${entry.process}</span> → 
+                        <span class="state-badge state-${entry.state.toLowerCase()}">${entry.state}</span>
+                    `;
+                    visualization.appendChild(stateChange);
+                }
+            });
+            
+            queueDisplay.appendChild(visualization);
+        }
+    </script>
+</body>
+</html>
