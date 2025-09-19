@@ -1,13 +1,66 @@
 # Simulador de Gestión de Procesos del Sistema Operativo
 
-Esta aplicación web simula el comportamiento del sistema operativo en la gestión de procesos, implementando estructuras PCB (Process Control Block) y algoritmos de planificación clásicos.
+## Descripción
+Aplicación web Flask que simula diferentes algoritmos de planificación de procesos en sistemas operativos, incluyendo FCFS, SJF y Round Robin.
 
-## Características Implementadas
+## Estructura del Proyecto Modularizada
 
-### ✅ Requisitos Funcionales Cumplidos
+```
+procesos 4.1/
+├── app.py                    # Aplicación Flask principal
+├── requirements.txt          # Dependencias del proyecto
+├── README.md                 # Documentación del proyecto
+├── models/                   # Modelos de datos
+│   ├── __init__.py
+│   └── pcb.py               # Clase PCB (Process Control Block)
+├── schedulers/              # Algoritmos de planificación
+│   ├── __init__.py
+│   ├── process_scheduler.py # Scheduler principal
+│   └── algorithms.py        # Implementación de algoritmos
+├── utils/                   # Utilidades
+│   ├── __init__.py
+│   └── timeline.py          # Generación de timeline para animación
+├── static/                  # Archivos estáticos
+│   ├── style.css
+│   └── style_old.css
+└── templates/               # Templates HTML
+    └── index.html
+```
 
-1. **Estructuras PCB (Process Control Block)**
-   - Cada proceso tiene: PID, tiempo de llegada, duración, prioridad, estado, tiempos de ejecución
+## Módulos
+
+### Models (`models/`)
+- **`pcb.py`**: Define la clase PCB (Process Control Block) que representa la estructura de datos de cada proceso, incluyendo información de CPU, memoria, E/O, archivos y seguridad.
+
+### Schedulers (`schedulers/`)
+- **`process_scheduler.py`**: Clase principal que maneja la planificación de procesos y actúa como interfaz para los algoritmos.
+- **`algorithms.py`**: Implementación de los algoritmos de planificación:
+  - FCFS (First Come First Served)
+  - SJF (Shortest Job First)  
+  - Round Robin
+
+### Utils (`utils/`)
+- **`timeline.py`**: Funciones para generar datos de timeline para la animación web de la ejecución de procesos.
+
+## Algoritmos Implementados
+
+### 1. FCFS (First Come First Served)
+- Los procesos se ejecutan en orden de llegada
+- No es preemptivo
+- Simple pero puede causar el efecto convoy
+
+### 2. SJF (Shortest Job First)
+- **Característica especial**: Carga todos los procesos por lote al inicio
+- Ordena los procesos únicamente por tiempo de ráfaga (burst time)
+- Ejecuta en orden de ráfaga más corta primero
+- No es preemptivo
+- Minimiza el tiempo promedio de espera
+
+### 3. Round Robin
+- Asigna un quantum de tiempo a cada proceso
+- Es preemptivo
+- Los procesos rotan en una cola circular
+- Configurable el quantum de tiempo
 
 2. **Colas de Procesos**
    - Visualización de estados: NEW, READY, RUNNING, TERMINATED
