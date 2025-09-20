@@ -1,6 +1,3 @@
-"""
-Aplicación Flask para Simulador de Gestión de Procesos del Sistema Operativo
-"""
 
 from flask import Flask, render_template, request, jsonify
 from schedulers import ProcessScheduler

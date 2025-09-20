@@ -1,303 +1,263 @@
 """
-Módulo de Algoritmos de Planificación
-Contiene la implementación de los diferentes algoritmos de planificación de procesos.
+Algoritmos de Planificación de Procesos
+========================================
+Implementa tres algoritmos básicos de sistemas operativos:
+- FCFS (First Come First Served)
+- SJF (Shortest Job First) 
+- Round Robin
 """
 
 class SchedulingAlgorithms:
-    """Clase que contiene los algoritmos de planificación de procesos"""
+    """Algoritmos de planificación de procesos para el sistema operativo"""
+    
+    @staticmethod
+    def _agregar_evento(historial, tiempo, accion, proceso_id, estado):
+        """Función auxiliar para agregar eventos al historial de manera consistente"""
+        historial.append({
+            'time': tiempo,
+            'action': accion,
+            'process': proceso_id,
+            'state': estado
+        })
+    
+    @staticmethod
+    def _ejecutar_proceso_completo(proceso, tiempo_inicio, historial):
+        """
+        Función auxiliar que ejecuta un proceso completamente.
+        Útil para FCFS y SJF que no tienen interrupciones.
+        """
+        # Marcar como listo
+        proceso.state = "READY"
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_inicio, f'Proceso {proceso.pid} → LISTO', proceso.pid, 'READY'
+        )
+        
+        # Comenzar ejecución
+        proceso.start_time = tiempo_inicio
+        proceso.state = "EXECUTING"
+        proceso.update_cpu_context(program_counter=0, instruction_pointer=tiempo_inicio)
+        
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_inicio, f'Proceso {proceso.pid} → EJECUTANDO', proceso.pid, 'EXECUTING'
+        )
+        
+        # Calcular tiempo de finalización
+        tiempo_fin = tiempo_inicio + proceso.burst_time
+        
+        # Marcar como terminado
+        proceso.completion_time = tiempo_fin
+        proceso.calculate_times()
+        proceso.state = "TERMINATED"
+        proceso.update_cpu_context(program_counter=proceso.burst_time)
+        
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_fin, f'Proceso {proceso.pid} → TERMINADO', proceso.pid, 'TERMINATED'
+        )
+        
+        return tiempo_fin
     
     @staticmethod
     def fcfs_scheduling(processes):
         """
-        First Come First Served
+        FCFS: Primer Llegado, Primer Servido
+        
+        Regla simple: Los procesos se ejecutan en orden de llegada.
+        No hay interrupciones hasta que el proceso termine.
+        
         Args:
-            processes: Lista de procesos PCB
+            processes: Lista de objetos PCB (Process Control Block)
         Returns:
-            tuple: (execution_log, current_time)
+            tuple: (historial_ejecución, tiempo_total)
         """
-        current_time = 0
-        execution_log = []
+        tiempo_actual = 0
+        historial = []
         
-        # Ordenar por tiempo de llegada
-        sorted_processes = sorted(processes, key=lambda p: p.arrival_time)
+        # PASO 1: Ordenar procesos por tiempo de llegada
+        procesos_ordenados = sorted(processes, key=lambda p: p.arrival_time)
         
-        for process in sorted_processes:
-            # Cambiar estado a READY cuando el proceso llega
-            if current_time < process.arrival_time:
-                current_time = process.arrival_time
+        # PASO 2: Ejecutar cada proceso completamente
+        for proceso in procesos_ordenados:
+            # Esperar hasta que el proceso llegue (si es necesario)
+            if tiempo_actual < proceso.arrival_time:
+                tiempo_actual = proceso.arrival_time
             
-            process.state = "READY"
-            execution_log.append({
-                'time': current_time,
-                'action': f'Proceso {process.pid} está listo (READY)',
-                'process': process.pid,
-                'state': 'READY'
-            })
-                
-            process.start_time = current_time
-            process.state = "EXECUTING"
+            # Ejecutar proceso completamente usando función auxiliar
+            tiempo_actual = SchedulingAlgorithms._ejecutar_proceso_completo(
+                proceso, tiempo_actual, historial
+            )
             
-            # Actualizar contexto de CPU
-            process.update_cpu_context(program_counter=0, instruction_pointer=process.start_time)
-            
-            execution_log.append({
-                'time': current_time,
-                'action': f'Proceso {process.pid} inicia ejecución (EXECUTING)',
-                'process': process.pid,
-                'state': 'EXECUTING'
-            })
-            
-            current_time += process.burst_time
-            process.completion_time = current_time
-            process.calculate_times()
-            process.state = "TERMINATED"
-            
-            # Actualizar contexto final
-            process.update_cpu_context(program_counter=process.burst_time)
-            
-            execution_log.append({
-                'time': current_time,
-                'action': f'Proceso {process.pid} termina (TERMINATED)',
-                'process': process.pid,
-                'state': 'TERMINATED'
-            })
-            
-        return execution_log, current_time
+        return historial, tiempo_actual
     
     @staticmethod
     def sjf_scheduling(processes):
         """
-        Shortest Job First - Carga todos los procesos por lote y ordena por ráfaga
+        SJF: Trabajo Más Corto Primero
+        
+        Regla: Ejecutar primero el proceso con menor tiempo de ráfaga.
+        Sistema batch: conoce todos los procesos desde el inicio.
+        
         Args:
-            processes: Lista de procesos PCB
+            processes: Lista de objetos PCB
         Returns:
-            tuple: (execution_log, current_time)
+            tuple: (historial_ejecución, tiempo_total)
         """
-        current_time = 0
-        execution_log = []
+        tiempo_actual = 0
+        historial = []
         
-        # PASO 1: Cargar todos los procesos por lote para conocer sus ráfagas
-        execution_log.append({
-            'time': current_time,
-            'action': '=== SJF: CARGA POR LOTES ===',
-            'process': 'SYSTEM',
-            'state': 'INFO'
-        })
+        # PASO 1: Mostrar información del sistema batch
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_actual, 'SJF: Cargando todos los procesos...', 'SISTEMA', 'INFO'
+        )
         
-        # Mostrar información de todos los procesos cargados
-        process_info = []
-        for process in processes:
-            process_info.append(f"P{process.pid} (Llegada: {process.arrival_time}, Ráfaga: {process.burst_time})")
+        info_procesos = [f"P{p.pid}(llegada:{p.arrival_time}, ráfaga:{p.burst_time})" for p in processes]
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_actual, f'Procesos: {", ".join(info_procesos)}', 'SISTEMA', 'INFO'
+        )
         
-        execution_log.append({
-            'time': current_time,
-            'action': f'Procesos cargados: {", ".join(process_info)}',
-            'process': 'SYSTEM',
-            'state': 'INFO'
-        })
+        # PASO 2: Ordenar SOLO por tiempo de ráfaga (burst_time)
+        procesos_ordenados = sorted(processes, key=lambda p: p.burst_time)
         
-        # PASO 2: ORDENAR TODOS LOS PROCESOS ÚNICAMENTE POR BURST_TIME (RÁFAGA)
-        processes_sorted_by_burst = sorted(processes, key=lambda p: p.burst_time)
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_actual, 'Ordenando por tiempo de ráfaga...', 'SISTEMA', 'INFO'
+        )
         
-        execution_log.append({
-            'time': current_time,
-            'action': '=== ORDENAMIENTO POR RÁFAGA (BURST TIME) ===',
-            'process': 'SYSTEM',
-            'state': 'INFO'
-        })
+        orden_rafaga = [f"P{p.pid}(ráfaga:{p.burst_time})" for p in procesos_ordenados]
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_actual, f'Orden final: {" → ".join(orden_rafaga)}', 'SISTEMA', 'INFO'
+        )
         
-        burst_order = []
-        for p in processes_sorted_by_burst:
-            burst_order.append(f"P{p.pid} (ráfaga: {p.burst_time})")
+        # PASO 3: Ejecutar en orden de ráfaga
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_actual, 'Iniciando ejecución SJF...', 'SISTEMA', 'INFO'
+        )
         
-        execution_log.append({
-            'time': current_time,
-            'action': f'Orden final por ráfaga: {" → ".join(burst_order)}',
-            'process': 'SYSTEM',
-            'state': 'INFO'
-        })
-        
-        # PASO 3: Ejecutar procesos EN EXACTAMENTE EL ORDEN DE RÁFAGA
-        execution_log.append({
-            'time': current_time,
-            'action': '=== INICIO DE EJECUCIÓN SJF ===',
-            'process': 'SYSTEM',
-            'state': 'INFO'
-        })
-        
-        # Ejecutar cada proceso en el orden establecido
-        for i, process in enumerate(processes_sorted_by_burst):
-            execution_log.append({
-                'time': current_time,
-                'action': f'SELECCIONADO: P{process.pid} (ráfaga: {process.burst_time}) - Posición {i+1} en orden de ráfaga',
-                'process': process.pid,
-                'state': 'SELECTED'
-            })
+        for posicion, proceso in enumerate(procesos_ordenados, 1):
+            SchedulingAlgorithms._agregar_evento(
+                historial, tiempo_actual, 
+                f'Seleccionado: P{proceso.pid} (ráfaga: {proceso.burst_time}) - Posición {posicion}',
+                proceso.pid, 'SELECTED'
+            )
             
-            # Esperar hasta que el proceso llegue si es necesario
-            if current_time < process.arrival_time:
-                execution_log.append({
-                    'time': current_time,
-                    'action': f'Esperando llegada de P{process.pid} (llegará en t={process.arrival_time})',
-                    'process': process.pid,
-                    'state': 'WAITING'
-                })
-                current_time = process.arrival_time
+            # Esperar hasta que llegue el proceso (si es necesario)
+            if tiempo_actual < proceso.arrival_time:
+                SchedulingAlgorithms._agregar_evento(
+                    historial, tiempo_actual, 
+                    f'Esperando llegada de P{proceso.pid} (t={proceso.arrival_time})',
+                    proceso.pid, 'WAITING'
+                )
+                tiempo_actual = proceso.arrival_time
             
-            # Cambiar a READY
-            process.state = "READY"
-            execution_log.append({
-                'time': current_time,
-                'action': f'Proceso {process.pid} está listo (READY)',
-                'process': process.pid,
-                'state': 'READY'
-            })
-                
-            # Iniciar ejecución
-            process.start_time = current_time
-            process.state = "EXECUTING"
+            # Ejecutar proceso usando función auxiliar
+            tiempo_actual = SchedulingAlgorithms._ejecutar_proceso_completo(
+                proceso, tiempo_actual, historial
+            )
             
-            # Actualizar contexto de CPU
-            process.update_cpu_context(program_counter=0, instruction_pointer=process.start_time)
-            
-            execution_log.append({
-                'time': current_time,
-                'action': f'Proceso {process.pid} inicia ejecución (EXECUTING) - Ráfaga: {process.burst_time}',
-                'process': process.pid,
-                'state': 'EXECUTING'
-            })
-            
-            # Ejecutar por completo (no preemptivo)
-            current_time += process.burst_time
-            process.completion_time = current_time
-            process.calculate_times()
-            process.state = "TERMINATED"
-            
-            # Actualizar contexto final
-            process.update_cpu_context(program_counter=process.burst_time)
-            
-            execution_log.append({
-                'time': current_time,
-                'action': f'Proceso {process.pid} termina (TERMINATED) - Tiempo total: {process.burst_time}',
-                'process': process.pid,
-                'state': 'TERMINATED'
-            })
-            
-        # Mostrar resumen final
-        execution_log.append({
-            'time': current_time,
-            'action': '=== RESUMEN DE EJECUCIÓN SJF ===',
-            'process': 'SYSTEM',
-            'state': 'INFO'
-        })
+        # Resumen final
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_actual, 'Resumen SJF completado', 'SISTEMA', 'INFO'
+        )
         
-        execution_order = [f"P{p.pid} (ráfaga: {p.burst_time})" for p in processes_sorted_by_burst]
-        execution_log.append({
-            'time': current_time,
-            'action': f'Orden de ejecución final: {" → ".join(execution_order)}',
-            'process': 'SYSTEM',
-            'state': 'INFO'
-        })
+        orden_final = [f"P{p.pid}(ráfaga:{p.burst_time})" for p in procesos_ordenados]
+        SchedulingAlgorithms._agregar_evento(
+            historial, tiempo_actual, f'Orden ejecutado: {" → ".join(orden_final)}', 'SISTEMA', 'INFO'
+        )
             
-        return execution_log, current_time
+        return historial, tiempo_actual
     
     @staticmethod
     def round_robin_scheduling(processes, quantum=2):
         """
-        Round Robin con quantum de tiempo
-        Args:
-            processes: Lista de procesos PCB
-            quantum: Quantum de tiempo para el algoritmo
-        Returns:
-            tuple: (execution_log, current_time)
-        """
-        current_time = 0
-        execution_log = []
-        ready_queue = []
-        remaining_processes = [(p.pid, p.arrival_time, p.burst_time, p.priority) for p in processes]
-        process_remaining_time = {p.pid: p.burst_time for p in processes}
-        process_objects = {p.pid: p for p in processes}
+        Round Robin: Planificación Circular con Quantum
         
-        while remaining_processes or ready_queue:
-            # Agregar procesos que han llegado a la cola de listos
-            arrived_processes = [p for p in remaining_processes if p[1] <= current_time]
-            for p in arrived_processes:
-                ready_queue.append(p)
-                remaining_processes.remove(p)
-                # Cambiar estado a READY
-                process_obj = process_objects[p[0]]
-                process_obj.state = "READY"
+        Regla: Cada proceso ejecuta máximo 'quantum' unidades de tiempo,
+        luego pasa el turno al siguiente proceso en la cola.
+        
+        Args:
+            processes: Lista de objetos PCB
+            quantum: Tiempo máximo que puede ejecutar cada proceso por turno
+        Returns:
+            tuple: (historial_ejecución, tiempo_total)
+        """
+        tiempo_actual = 0
+        historial = []
+        cola_listos = []  # Procesos esperando su turno
+        
+        # Configuración 
+        procesos_pendientes = [(p.pid, p.arrival_time, p.burst_time, p.priority) for p in processes]
+        tiempo_restante = {p.pid: p.burst_time for p in processes}
+        objetos_proceso = {p.pid: p for p in processes}
+        
+        def agregar_procesos_llegados():
+            """Función auxiliar: agrega procesos que han llegado a la cola"""
+            llegaron = [p for p in procesos_pendientes if p[1] <= tiempo_actual]
+            for proceso in llegaron:
+                cola_listos.append(proceso)
+                procesos_pendientes.remove(proceso)
                 
-                execution_log.append({
-                    'time': current_time,
-                    'action': f'Proceso {p[0]} está listo (READY)',
-                    'process': p[0],
-                    'state': 'READY'
-                })
+                obj_proceso = objetos_proceso[proceso[0]]
+                obj_proceso.state = "READY"
+                SchedulingAlgorithms._agregar_evento(
+                    historial, tiempo_actual, 
+                    f'Proceso {proceso[0]} → LISTO (llegó a la cola)', 
+                    proceso[0], 'READY'
+                )
+        
+        # Bucle principal: mientras haya procesos pendientes o en cola
+        while procesos_pendientes or cola_listos:
+            
+            # PASO 1: Agregar procesos que han llegado
+            agregar_procesos_llegados()
                 
-            if not ready_queue:
-                current_time += 1
+            # PASO 2: Si no hay procesos listos, avanzar tiempo
+            if not cola_listos:
+                tiempo_actual += 1
                 continue
                 
-            current_process = ready_queue.pop(0)
-            pid, arrival_time, burst_time, priority = current_process
-            process_obj = process_objects[pid]
+            # PASO 3: Tomar el primer proceso de la cola (FIFO)
+            proceso_actual = cola_listos.pop(0)
+            pid, arrival_time, burst_time, priority = proceso_actual
+            obj_proceso = objetos_proceso[pid]
             
-            execution_time = min(quantum, process_remaining_time[pid])
+            # PASO 4: Calcular tiempo de ejecución para este turno
+            tiempo_a_ejecutar = min(quantum, tiempo_restante[pid])
             
-            # Cambiar a EXECUTING
-            process_obj.state = "EXECUTING"
-            process_obj.cpu["program_counter"] += execution_time
-            process_obj.cpu["instruction_pointer"] = current_time
+            # PASO 5: Ejecutar el proceso
+            obj_proceso.state = "EXECUTING"
+            obj_proceso.cpu["program_counter"] += tiempo_a_ejecutar
+            obj_proceso.cpu["instruction_pointer"] = tiempo_actual
             
-            execution_log.append({
-                'time': current_time,
-                'action': f'Proceso {pid} ejecuta por {execution_time} unidades (EXECUTING)',
-                'process': pid,
-                'state': 'EXECUTING'
-            })
+            SchedulingAlgorithms._agregar_evento(
+                historial, tiempo_actual,
+                f'Proceso {pid} → EJECUTANDO por {tiempo_a_ejecutar} unidades (quantum={quantum})',
+                pid, 'EXECUTING'
+            )
             
-            current_time += execution_time
-            process_remaining_time[pid] -= execution_time
+            # Avanzar tiempo y reducir tiempo restante
+            tiempo_actual += tiempo_a_ejecutar
+            tiempo_restante[pid] -= tiempo_a_ejecutar
             
-            # Agregar procesos que llegaron durante la ejecución
-            arrived_during_execution = [p for p in remaining_processes if p[1] <= current_time]
-            for p in arrived_during_execution:
-                ready_queue.append(p)
-                remaining_processes.remove(p)
-                # Cambiar estado a READY
-                process_obj_new = process_objects[p[0]]
-                process_obj_new.state = "READY"
-                
-                execution_log.append({
-                    'time': current_time,
-                    'action': f'Proceso {p[0]} está listo (READY)',
-                    'process': p[0],
-                    'state': 'READY'
-                })
+            # PASO 6: Agregar procesos que llegaron DURANTE la ejecución
+            agregar_procesos_llegados()
             
-            if process_remaining_time[pid] > 0:
-                # Proceso no terminado - va a WAITING (simulando espera por quantum)
-                process_obj.state = "WAITING"
-                execution_log.append({
-                    'time': current_time,
-                    'action': f'Proceso {pid} espera su turno (WAITING)',
-                    'process': pid,
-                    'state': 'WAITING'
-                })
-                ready_queue.append(current_process)
+            # PASO 7: Decidir qué hacer con el proceso actual
+            if tiempo_restante[pid] > 0:
+                # NO terminó: vuelve a la cola
+                obj_proceso.state = "WAITING"
+                SchedulingAlgorithms._agregar_evento(
+                    historial, tiempo_actual,
+                    f'Proceso {pid} → ESPERANDO (le quedan {tiempo_restante[pid]} unidades)',
+                    pid, 'WAITING'
+                )
+                cola_listos.append(proceso_actual)  # Al final de la cola
             else:
-                # Proceso terminado
-                process_obj.state = "TERMINATED"
-                process_obj.completion_time = current_time
-                process_obj.turnaround_time = current_time - arrival_time
-                process_obj.waiting_time = process_obj.turnaround_time - burst_time
+                # SÍ terminó: marcar como terminado
+                obj_proceso.state = "TERMINATED"
+                obj_proceso.completion_time = tiempo_actual
+                obj_proceso.turnaround_time = tiempo_actual - arrival_time
+                obj_proceso.waiting_time = obj_proceso.turnaround_time - burst_time
                 
-                execution_log.append({
-                    'time': current_time,
-                    'action': f'Proceso {pid} termina (TERMINATED)',
-                    'process': pid,
-                    'state': 'TERMINATED'
-                })
+                SchedulingAlgorithms._agregar_evento(
+                    historial, tiempo_actual, f'Proceso {pid} → TERMINADO', pid, 'TERMINATED'
+                )
                 
-        return execution_log, current_time
+        return historial, tiempo_actual
